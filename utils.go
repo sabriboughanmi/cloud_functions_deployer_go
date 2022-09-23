@@ -22,52 +22,57 @@ func isGoFile(file os.FileInfo) bool {
 	return strings.HasSuffix(file.Name(), ".go")
 }
 
-//DeployFunctions deploys all tagged Cloud functions with associated CF parameters under the specified package path.
+// DeployFunctions deploys all tagged Cloud functions with associated CF parameters under the specified package path.
 func DeployFunctions(projectPath string) error {
+	fmt.Println("start")
+
 	path := projectPath
 	fmt.Println("current Path: " + path)
 
-	/*
-		//execute go mod vendor
-		var gcloudProjectID, err = ExecuteCommandAndGetValue("gcloud", "config", "get-value", "project")
-		if err != nil {
-			return err
-		}
+	//execute go mod vendor
+	var gcloudProjectID, err = ExecuteCommandAndGetValue("gcloud", "config", "get-value", "project")
+	if err != nil {
+		return err
+	}
 
-		answer, err := ConsolePopupRequest(fmt.Sprintf("Start Deploying Cloud Functions For Project : %s \n Start Deploy : Y,\n Cancel : N", gcloudProjectID), "y", "n")
+	answer, err := ConsolePopupRequest(fmt.Sprintf("Start Deploying Cloud Functions For Project : %s \n Start Deploy : Y,\n Cancel : N", gcloudProjectID), "y", "n")
 
-		if answer == "n" {
-			return fmt.Errorf("Deploy Rejected ! ")
-		}
-		input := bufio.NewScanner(os.Stdin)
-		input.Scan()
+	if answer == "n" {
+		return fmt.Errorf("Deploy Rejected ! ")
+	}
 
-	*/
+	fmt.Println("stop here")
+
+	input := bufio.NewScanner(os.Stdin)
+	input.Scan()
+	fmt.Println("stop here if error")
 
 	packagesCommands, err := fetchDeployCommands(path)
+
 	if err != nil {
 		return err
 	}
 
 	processDuration := time.Now()
-	var functionsCount = 0
+	fmt.Println("here")
 
 	//Get global dependencies
 	var globalPackageDependencies *ForcedDependencies
 	globalPackageDependencies, err = getForcedDependencies(projectPath + "/" + forcedDependenciesFileName)
-
 	//ignore error if global dependencies file doesn't exist
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
 
-	var errorChannel = make(chan error)
+	var errorChannel = make(chan error, 1)
 	var wg sync.WaitGroup
 	//var rateLimiter = utils.CreateLimiter(cloudFunctionsWriteLimit, 5, len(packagesCommands))
 	//rateLimiter.Start()
+	var functionsCount = 0
 
 	for _, packageConfig := range packagesCommands {
 		//Manage package dependencies
+		fmt.Println("herrgrrgr")
 
 		//Pick the right package dependency
 		var packageDependencies *ForcedDependencies
@@ -97,14 +102,21 @@ func DeployFunctions(projectPath string) error {
 
 		//Deploy Commands
 		for _, functionCommand := range packageConfig.Commands {
+
 			functionsCount++
 			wg.Add(1)
-
 			go func(fConfig command, packagePath string, waitGroup *sync.WaitGroup, errorChan chan error, functionIndex int) {
-				defer waitGroup.Done()
+				defer func() {
+					waitGroup.Done()
+					if err := recover(); err != nil {
+						fmt.Println(err)
+						time.Sleep(time.Second * 1)
+					}
+					fmt.Printf("Defer Called \n")
+					//panic("error")
 
+				}()
 				fConfig.Clean()
-
 				cmd := exec.Command(fConfig[0], fConfig[1:]...)
 
 				//Move to correct package directory before deploy
@@ -118,18 +130,20 @@ func DeployFunctions(projectPath string) error {
 				//wait for Rate Limit
 				//rateLimiter.Wait()
 				time.Sleep(cloudFunctionsWriteLimit * time.Duration(functionIndex))
-
 				fmt.Printf("Deploying %s Started! with command : %v\n", fConfig[3], fConfig)
+				fmt.Println(functionIndex)
 
 				//Start command
 
 				if err = cmd.Run(); err != nil {
 					errorString := fmt.Sprintf("Deploying %s Failed with Error: %v, \n", fConfig[3], stderr.String())
-					fmt.Println(errorString)
-					errorChan <- fmt.Errorf(errorString)
-					return
+					select {
+					case errorChan <- fmt.Errorf(errorString):
+						fmt.Println("sent error", errorString)
+					default:
+						fmt.Println("no error sent ")
+					}
 				}
-
 				fmt.Printf("Deploying %s from path %s Completed!\n", fConfig[3], packagePath)
 			}(functionCommand, packageConfig.PackagePath, &wg, errorChannel, functionsCount)
 
@@ -139,19 +153,17 @@ func DeployFunctions(projectPath string) error {
 
 	//wait for channels
 	wg.Wait()
-
+	close(errorChannel)
 	//Stop the Rate Limiter
 	//rateLimiter.Stop()
-
+	fmt.Println("hereeeeeeeeeeeeeeeeeeeeee")
 	//Remove Vendors
 	for _, packageCmds := range packagesCommands {
 		if err = deleteVendor(packageCmds.PackagePath); err != nil {
 			fmt.Printf("Error Deleting Vendor for Package : %s, with Error: %v !\n", packageCmds.PackagePath, err)
 		}
 	}
-
 	var receivedErrors []string
-	close(errorChannel)
 	for err := range errorChannel {
 		receivedErrors = append(receivedErrors, err.Error())
 	}
@@ -159,29 +171,32 @@ func DeployFunctions(projectPath string) error {
 	if len(receivedErrors) > 0 {
 		return fmt.Errorf("Got %d Errors while commit - Errors : %s  \n", len(receivedErrors), string(utils.UnsafeAnythingToJSON(receivedErrors)))
 	}
-
-	fmt.Printf("  Deploying %d CloudFunctions Took: %v\n", functionsCount, time.Since(processDuration))
+	fmt.Printf("  Deploying %d CloudFunctions Tool: %v\n", functionsCount, time.Since(processDuration))
 	fmt.Println("Deploy Completed Successfully!")
 	fmt.Println("Click Enter to Exit")
-	input := bufio.NewScanner(os.Stdin)
+	input = bufio.NewScanner(os.Stdin)
 	input.Scan()
 	return nil
 }
 
-//fetchDeployCommands returns the GCloud deployment commands tagged under a package path, and it's subpackages.
+// fetchDeployCommands returns the GCloud deployment commands tagged under a package path, and it's subpackages.
 func fetchDeployCommands(packagePath string) ([]packageCommands, error) {
+	fmt.Println("start fetching")
 	files, err := ioutil.ReadDir(packagePath)
+	fmt.Println("start fetching")
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	var packagesCommands []packageCommands
+	fmt.Println("start fetching1")
 
 	var currentPackageCommands = packageCommands{
 		Commands:     nil,
 		PackagePath:  packagePath,
 		Dependencies: nil,
 	}
+	fmt.Println("start fetching2")
 
 	//Check if current package has its own forced dependencies
 	for _, file := range files {
@@ -193,6 +208,7 @@ func fetchDeployCommands(packagePath string) ([]packageCommands, error) {
 			currentPackageCommands.Dependencies = dependencies
 		}
 	}
+	fmt.Println("start fetching3")
 
 	var (
 		deployCommandsPrefix = []string{"gcloud", "functions", "deploy"}

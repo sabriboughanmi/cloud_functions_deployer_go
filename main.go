@@ -15,7 +15,7 @@ func main() {
 	if err != nil {
 		log.Println(err)
 	}
-	//	packagePath = "C:\\Go Projects\\cwbr_v2\\cloudfunctions"
+	packagePath = "C:\\Users\\safab\\NewT4u\\cloudfunctions"
 
 	fmt.Println(packagePath)
 
@@ -23,5 +23,4 @@ func main() {
 		fmt.Println(err)
 		return
 	}
-
 }
