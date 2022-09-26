@@ -24,8 +24,6 @@ func isGoFile(file os.FileInfo) bool {
 
 // DeployFunctions deploys all tagged Cloud functions with associated CF parameters under the specified package path.
 func DeployFunctions(projectPath string) error {
-	fmt.Println("start")
-
 	path := projectPath
 	fmt.Println("current Path: " + path)
 
@@ -41,11 +39,8 @@ func DeployFunctions(projectPath string) error {
 		return fmt.Errorf("Deploy Rejected ! ")
 	}
 
-	fmt.Println("stop here")
-
 	input := bufio.NewScanner(os.Stdin)
 	input.Scan()
-	fmt.Println("stop here if error")
 
 	packagesCommands, err := fetchDeployCommands(path)
 
@@ -54,8 +49,6 @@ func DeployFunctions(projectPath string) error {
 	}
 
 	processDuration := time.Now()
-	fmt.Println("here")
-
 	//Get global dependencies
 	var globalPackageDependencies *ForcedDependencies
 	globalPackageDependencies, err = getForcedDependencies(projectPath + "/" + forcedDependenciesFileName)
@@ -72,8 +65,6 @@ func DeployFunctions(projectPath string) error {
 
 	for _, packageConfig := range packagesCommands {
 		//Manage package dependencies
-		fmt.Println("herrgrrgr")
-
 		//Pick the right package dependency
 		var packageDependencies *ForcedDependencies
 
@@ -156,7 +147,6 @@ func DeployFunctions(projectPath string) error {
 	close(errorChannel)
 	//Stop the Rate Limiter
 	//rateLimiter.Stop()
-	fmt.Println("hereeeeeeeeeeeeeeeeeeeeee")
 	//Remove Vendors
 	for _, packageCmds := range packagesCommands {
 		if err = deleteVendor(packageCmds.PackagePath); err != nil {
@@ -181,23 +171,16 @@ func DeployFunctions(projectPath string) error {
 
 // fetchDeployCommands returns the GCloud deployment commands tagged under a package path, and it's subpackages.
 func fetchDeployCommands(packagePath string) ([]packageCommands, error) {
-	fmt.Println("start fetching")
 	files, err := ioutil.ReadDir(packagePath)
-	fmt.Println("start fetching")
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	var packagesCommands []packageCommands
-	fmt.Println("start fetching1")
-
 	var currentPackageCommands = packageCommands{
 		Commands:     nil,
 		PackagePath:  packagePath,
 		Dependencies: nil,
 	}
-	fmt.Println("start fetching2")
-
 	//Check if current package has its own forced dependencies
 	for _, file := range files {
 		if file.Name() == forcedDependenciesFileName {
@@ -208,8 +191,6 @@ func fetchDeployCommands(packagePath string) ([]packageCommands, error) {
 			currentPackageCommands.Dependencies = dependencies
 		}
 	}
-	fmt.Println("start fetching3")
-
 	var (
 		deployCommandsPrefix = []string{"gcloud", "functions", "deploy"}
 	)
